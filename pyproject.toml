@@ -1,5 +1,6 @@
 [project]
 name = "sns24"
+version = "0.1.0"
 dependencies = [
     "chromadb", # provavelmente
     "pymongo", # provavelmente

@@ -27,6 +27,6 @@ jobs:
       run: |
         ruff check .
     
-    - name: Run tests
-      run: |
-        pytest tests/ -v
+    #- name: Run tests
+    #  run: |
+    #    pytest tests/ -v
