@@ -1,0 +1,37 @@
+[project]
+name = "sns24"
+dependencies = [
+    "chromadb", # provavelmente
+    "pymongo", # provavelmente
+    "psycopg[binary]", # provavelmente
+    "streamlit", # provavelmente
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "pytest",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 99 # (pep8)
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # errors (pycodestyle)
+    "W",   # warnings (pycodestyle)
+    "F",   # errors (pyflakes)
+    "I",   # import (isort)
+    "N",   # naming (pep8-naming)
+    "UP",  # modern Python syntax (pyupgrade)
+    "B",   # catch bugs/design problems (flake8-bugbear)
+    "C4",  # better list/dict/set comprehensions (flake8-comprehensions)
+    "SIM", # simplification suggestions (flake8-simplify)
+]
+ignore = []
