@@ -1,5 +1,5 @@
 [project]
-name = "sns24"
+name = "Helth"
 version = "0.1.0"
 dependencies = [
     "chromadb", # provavelmente
