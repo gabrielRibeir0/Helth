@@ -2,18 +2,44 @@
 name = "Helth"
 version = "0.1.0"
 dependencies = [
-    "chromadb", # provavelmente
-    "pymongo", # provavelmente
-    "psycopg[binary]", # provavelmente
-    "streamlit", # provavelmente
-    "python-dotenv",
-    "sqlalchemy",
+    # Databases
+    "chromadb",              # Vector store para RAG
+    "pymongo",               # MongoDB para dados não estruturados
+    "psycopg[binary]",       # PostgreSQL para dados estruturados
+    "sqlalchemy",            # ORM
+    
+    # LLM & AI
+    "langchain>=0.1.0",      # Framework para LLM agents
+    "langchain-core",        # Core do LangChain
+    "langchain-community",   # Integrações community
+    
+    # MedGemma - escolher UMA das seguintes opções:
+    # Opção 1: HuggingFace (local, mais controlo)
+    "transformers>=4.38.0",  # Para carregar modelos HuggingFace
+    "accelerate",            # Otimização GPU
+    "bitsandbytes",          # Quantização 4-bit
+    "torch>=2.0.0",          # PyTorch
+    "sentencepiece",         # Tokenizer
+    
+    # Opção 2: Google Vertex AI (cloud, escalável) - descomentar se usar
+    # "langchain-google-vertexai",
+    # "google-cloud-aiplatform",
+    
+    # Utilities
+    "streamlit",             # Interface web
+    "python-dotenv",         # Gestão de variáveis de ambiente
+    "pandas",                # Manipulação de dados
+    "numpy",                 # Cálculos numéricos
+    "requests",              # HTTP requests
+    "beautifulsoup4",        # Web scraping
 ]
 
 [project.optional-dependencies]
 dev = [
     "ruff",
     "pytest",
+    "jupyter",               # Para notebooks de exploração
+    "ipykernel",
 ]
 
 [build-system]
