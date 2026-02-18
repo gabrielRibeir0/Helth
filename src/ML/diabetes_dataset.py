@@ -66,6 +66,11 @@ def tratamento_dados(df):
         'diabetes_stage': 'estágio_diabetes',
         'diagnosed_diabetes': 'diagnóstico_diabetes'
     }, inplace=True)
+
+    df.drop(columns=['status_tabagismo', 'consumo_alcool_semanal', 'atividade_física_minutos_semanal', 'pontuação_dieta', 'horas_sono_diário', 
+                    'tempo_tela_horas_diário', 'étnia', 'status_emprego', 'nível_educacional', 'nível_renda', 'histórico_cardiovascular',
+                    'histórico_hipertensão', 'frequência_cardíaca'
+                    ], inplace=True)
     
     return df
 
