@@ -2,6 +2,11 @@
 
 ## Semana 4: Persistência
 
+## ADR (Architecture Decision Records)
+
+- Índice ADR: [docs/adr/README.md](docs/adr/README.md)
+- Primeiro registo: [docs/adr/0001-arquitetura-persistencia.md](docs/adr/0001-arquitetura-persistencia.md)
+
 ### 1) Levantar bases de dados no Docker
 
 ```sh

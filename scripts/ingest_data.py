@@ -1,14 +1,26 @@
 from datetime import datetime
+from pathlib import Path
+import sys
 from typing import Any
-from urllib.parse import urljoin
 
-import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.persistence.week4_persistence import (  # noqa: E402
+    index_documents_in_chroma,
+    log_event_in_mongo,
+    store_documents_in_mongo,
+)
 
 NHS_DIABETES_URL = "https://www.nhs.uk/conditions/diabetes/"
 DEFAULT_HEADERS = {"User-Agent": "Mozilla/5.0"}
 REQUEST_TIMEOUT = 20
+MONGO_COLLECTION_NHS = "nhs_diabetes_content"
+CHROMA_COLLECTION_NHS = "nhs_diabetes_embeddings"
 NHS_NAVIGATING_LINKS = {
  'Type 1 diabetes': 'https://www.nhs.uk/conditions/type-1-diabetes/',
  'Type 2 diabetes': 'https://www.nhs.uk/conditions/type-2-diabetes/',
@@ -162,5 +174,117 @@ def ingest_nhs() -> dict[str, Any]:
         print(f"erro no crawler (HTTP): {exc}")
         return {}
 
+
+def _build_storage_payload(nhs_result: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str], list[dict[str, Any]]]:
+    mongo_docs: list[dict[str, Any]] = []
+    chroma_docs: list[str] = []
+    chroma_metadatas: list[dict[str, Any]] = []
+
+    captured_at = nhs_result.get("capturado_em")
+    source = nhs_result.get("fonte")
+
+    def append_document(tipo: str, secao: str, texto: str, url: str) -> None:
+        cleaned_text = (texto or "").strip()
+        if not cleaned_text:
+            return
+
+        mongo_docs.append(
+            {
+                "source": source,
+                "capturado_em": captured_at,
+                "tipo": tipo,
+                "secao": secao,
+                "texto": cleaned_text,
+                "url": url,
+            }
+        )
+
+        chroma_docs.append(
+            " | ".join(
+                [
+                    f"tipo: {tipo}",
+                    f"secao: {secao}",
+                    f"texto: {cleaned_text}",
+                    f"url: {url}",
+                ]
+            )
+        )
+
+        chroma_metadatas.append(
+            {
+                "tipo": tipo,
+                "secao": secao,
+                "source": source,
+                "url": url,
+            }
+        )
+
+    append_document("geral", "intro", nhs_result.get("intro", ""), NHS_DIABETES_URL)
+
+    for row in nhs_result.get("tipos_diabetes", []):
+        tipo = row.get("tipo_diabetes", "desconhecido")
+        append_document(tipo, "descricao", row.get("descricao", ""), NHS_DIABETES_URL)
+
+    for symptom in nhs_result.get("sintomas_gerais", []):
+        append_document("geral", "sintoma", symptom, NHS_DIABETES_URL)
+
+    for tipo, details in nhs_result.get("detalhes_por_tipo", {}).items():
+        detail_url = details.get("url", "")
+        for symptom in details.get("sintomas", []):
+            append_document(tipo, "sintoma", symptom, detail_url)
+
+        append_document(tipo, "causa", details.get("causas", ""), detail_url)
+
+        for complication in details.get("complicacoes", []):
+            append_document(tipo, "complicacao", complication, detail_url)
+
+    return mongo_docs, chroma_docs, chroma_metadatas
+
+
+def persist_nhs_data(nhs_result: dict[str, Any]) -> dict[str, Any]:
+    if not nhs_result:
+        return {
+            "mongo_inserted": 0,
+            "chroma_indexed": 0,
+            "log_id": "",
+            "status": "skip",
+        }
+
+    mongo_docs, chroma_docs, chroma_metadatas = _build_storage_payload(nhs_result)
+
+    mongo_inserted = store_documents_in_mongo(
+        mongo_docs,
+        collection_name=MONGO_COLLECTION_NHS,
+    )
+    chroma_indexed = index_documents_in_chroma(
+        documents=chroma_docs,
+        metadatas=chroma_metadatas,
+        collection_name=CHROMA_COLLECTION_NHS,
+    )
+    log_id = log_event_in_mongo(
+        {
+            "stage": "nhs_ingestion",
+            "status": "completed",
+            "source": nhs_result.get("fonte", NHS_DIABETES_URL),
+            "mongo_inserted": mongo_inserted,
+            "chroma_indexed": chroma_indexed,
+        }
+    )
+
+    return {
+        "mongo_inserted": mongo_inserted,
+        "chroma_indexed": chroma_indexed,
+        "log_id": log_id,
+        "status": "ok",
+    }
+
 if __name__ == "__main__":
-    ingest_nhs()
+    result = ingest_nhs()
+    persist_result = persist_nhs_data(result)
+
+    print("--- Resultado ingestão NHS ---")
+    print(f"Fonte: {result.get('fonte', NHS_DIABETES_URL)}")
+    print(f"Capturado em: {result.get('capturado_em', 'N/A')}")
+    print(f"MongoDB: {persist_result.get('mongo_inserted', 0)} documentos")
+    print(f"ChromaDB: {persist_result.get('chroma_indexed', 0)} embeddings")
+    print(f"Log Mongo: {persist_result.get('log_id', '')}")
