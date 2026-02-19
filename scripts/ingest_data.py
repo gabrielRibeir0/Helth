@@ -9,25 +9,30 @@ from bs4 import BeautifulSoup
 NHS_DIABETES_URL = "https://www.nhs.uk/conditions/diabetes/"
 DEFAULT_HEADERS = {"User-Agent": "Mozilla/5.0"}
 REQUEST_TIMEOUT = 20
+NHS_NAVIGATING_LINKS = {
+ 'Type 1 diabetes': 'https://www.nhs.uk/conditions/type-1-diabetes/',
+ 'Type 2 diabetes': 'https://www.nhs.uk/conditions/type-2-diabetes/',
+ 'Gestational diabetes': 'https://www.nhs.uk/conditions/gestational-diabetes/'
+}
 
-load_dotenv()
+# load_dotenv()
 
-PG_URL = f"postgresql://{os.getenv('POSTGRES_USER' )} : {os. getenv('POSTGRES_PASSWORD' )}@localhost: 5432/{os.getenv('POSTGRES_DB')}"
-MONGO_URL= "mongodb://localhost:27017/"
+# PG_URL = f"postgresql://{os.getenv('POSTGRES_USER' )} : {os. getenv('POSTGRES_PASSWORD' )}@localhost: 5432/{os.getenv('POSTGRES_DB')}"
+# MONGO_URL= "mongodb://localhost:27017/"
 
-def ingest_structured_data(file_path):
-    engine = create_engine(PG_URL)
-    af = pd.read_csv(file_path)
-    af.to_sql('saude_transacional', engine, if_exists='append', index=False, chunksize=10000)
-    print(f"Inseridos {len(af)} registos no PostgreSQL.")
+# def ingest_structured_data(file_path):
+#     engine = create_engine(PG_URL)
+#     af = pd.read_csv(file_path)
+#     af.to_sql('saude_transacional', engine, if_exists='append', index=False, chunksize=10000)
+#     print(f"Inseridos {len(af)} registos no PostgreSQL.")
 
-def ingest_unstructured_data(json_data):
-    client = MongoClient(MONGO_URL)
-    ab = client['helth_ab']
-    collection = ab['logs_saude']
-    collection.insert_many(json_data)
+# def ingest_unstructured_data(json_data):
+#     client = MongoClient(MONGO_URL)
+#     ab = client['helth_ab']
+#     collection = ab['logs_saude']
+#     collection.insert_many(json_data)
 
-    print(f'Inseridos {len(json_data)} documentos no MongoDB. ')
+#     print(f'Inseridos {len(json_data)} documentos no MongoDB. ')
 
 
 def _get_soup(url: str) -> BeautifulSoup:
@@ -37,9 +42,16 @@ def _get_soup(url: str) -> BeautifulSoup:
 
 
 def _extract_intro(soup: BeautifulSoup) -> str:
-    paragraph = soup.find("main").find("p") if soup.find("main") else soup.find("p")
-    return paragraph.get_text(strip=True) if paragraph else ""
+    main = soup.find("main")
+    if not main:
+        return ""
 
+    for p in main.find_all("p", recursive=True):
+        text = p.get_text(strip=True)
+        if len(text) > 40:
+            return text
+
+    return ""
 
 def _extract_main_table_rows(soup: BeautifulSoup) -> list[dict[str, str]]:
     table = soup.find("table")
@@ -60,19 +72,19 @@ def _extract_main_table_rows(soup: BeautifulSoup) -> list[dict[str, str]]:
     return rows
 
 
-def _extract_linked_diabetes_pages(soup: BeautifulSoup, base_url: str) -> dict[str, str]:
-    table = soup.find("table")
-    if not table:
-        return {}
+# def _extract_linked_diabetes_pages(soup: BeautifulSoup, base_url: str) -> dict[str, str]:
+#     table = soup.find("table")
+#     if not table:
+#         return {}
 
-    links = {}
-    for link in table.select("a[href]"):
-        title = link.get_text(strip=True)
-        href = link.get("href", "")
-        if not title or not href:
-            continue
-        links[title] = urljoin(base_url, href)
-    return links
+#     links = {}
+#     for link in table.select("a[href]"):
+#         title = link.get_text(strip=True)
+#         href = link.get("href", "")
+#         if not title or not href:
+#             continue
+#         links[title] = urljoin(base_url, href)
+#     return links
 
 
 def _find_section_header(soup: BeautifulSoup, keywords: tuple[str, ...]):
@@ -106,13 +118,19 @@ def _extract_text_section(soup: BeautifulSoup, keywords: tuple[str, ...]) -> str
 
 def extrair_info_diabetes(url: str) -> dict[str, Any]:
     soup = _get_soup(url)
+
     return {
         "url": url,
-        "sintomas": _extract_bullet_section(soup, ("symptoms",)),
-        "causas": _extract_text_section(soup, ("causes", "risk factors")),
-        "complicacoes": _extract_bullet_section(soup, ("complications",)),
+        "sintomas": _extract_bullet_section(
+            soup, ("symptom",)
+        ),
+        "causas": _extract_text_section(
+            soup, ("cause", "risk")
+        ),
+        "complicacoes": _extract_bullet_section(
+            soup, ("complication",)
+        ),
     }
-
 
 def ingest_nhs() -> dict[str, Any]:
     try:
@@ -120,10 +138,14 @@ def ingest_nhs() -> dict[str, Any]:
 
         intro = _extract_intro(soup)
         tabela_tipos = _extract_main_table_rows(soup)
-        links = _extract_linked_diabetes_pages(soup, NHS_DIABETES_URL)
-        sintomas_gerais = _extract_bullet_section(soup, ("symptoms of diabetes", "symptoms"))
+        sintomas_gerais = _extract_bullet_section(
+            soup, ("symptom",)
+        )
 
-        detalhes = {tipo: extrair_info_diabetes(url) for tipo, url in links.items()}
+        detalhes = {
+            tipo: extrair_info_diabetes(url)
+            for tipo, url in NHS_NAVIGATING_LINKS.items()
+        }
 
         resultado = {
             "fonte": NHS_DIABETES_URL,
@@ -134,20 +156,11 @@ def ingest_nhs() -> dict[str, Any]:
             "detalhes_por_tipo": detalhes,
         }
 
-        print(intro)
-        print(pd.DataFrame(tabela_tipos))
-        for sintoma in sintomas_gerais:
-            print("-", sintoma)
-
         return resultado
 
     except requests.RequestException as exc:
         print(f"erro no crawler (HTTP): {exc}")
         return {}
-    except Exception as exc:
-        print(f"erro no crawler: {exc}")
-        return {}
-
 
 if __name__ == "__main__":
     ingest_nhs()
